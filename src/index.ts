@@ -11,7 +11,7 @@ import axios from "npm:axios";
 let apiKey: string;
 
 let lastAnalysisTime = 0;
-const analysisCooldown = 10000;
+const analysisCooldown = 10 * 1000;
 
 // @ts-ignore Eu que sei.
 const connection = createConnection(ProposedFeatures.all);
