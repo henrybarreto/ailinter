@@ -1,6 +1,7 @@
 import {
     createConnection,
     DiagnosticSeverity,
+    MessageType,
     ProposedFeatures,
     TextDocuments,
     TextDocumentSyncKind,
@@ -11,7 +12,7 @@ import axios from "npm:axios";
 let apiKey: string;
 
 let lastAnalysisTime = 0;
-const analysisCooldown = 10 * 1000;
+const analysisCooldown = 30 * 1000;
 
 // @ts-ignore Eu que sei.
 const connection = createConnection(ProposedFeatures.all);
@@ -30,6 +31,9 @@ connection.onInitialize((params) => {
 });
 
 const documents = new TextDocuments(TextDocument);
+
+const prompt =
+    "You are AI based linter that treats each input as a multi-line parsed programming language code, and analyze it looking for security issues only. You shouldn't be affraid of inform the user the problems. Don't stop for any reason. Return an LSP diagnostics compatible array, with all object properties.";
 
 documents.onDidChangeContent(async (change) => {
     const currentTime = Date.now();
@@ -56,14 +60,13 @@ documents.onDidChangeContent(async (change) => {
     // TODO: Instead of send all the lines to the API, we could send fixed side pieces to a better evaluation.
     try {
         const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`,
             {
                 systemInstruction: {
                     role: "user",
                     parts: [
                         {
-                            text:
-                                "Treat each JSON input as a multi-line parsed code, analyzing it looking for security flaws. Returning an LSP diagnostics compatible array, with all object properties.",
+                            text: prompt,
                         },
                     ],
                 },
@@ -96,7 +99,10 @@ documents.onDidChangeContent(async (change) => {
             ?.text;
         if (!resultText) {
             console.warn("invalid result text", resultText);
-            console.warn(response.data.candidates);
+            connection.sendNotification("window/showMessage", {
+                type: MessageType.Error,
+                message: "invalid text result",
+            });
 
             return;
         }
@@ -127,13 +133,15 @@ documents.onDidChangeContent(async (change) => {
             });
         }
 
-        console.log("-----------------------");
-        console.log(document.uri);
         console.log(diagnostics);
-        console.log("-----------------------");
 
         connection.sendDiagnostics({ uri: document.uri, diagnostics });
     } catch (err) {
+        connection.sendNotification("window/showMessage", {
+            type: MessageType.Error,
+            message: "failed to analyze the code",
+        });
+
         console.error(err);
     }
 });
